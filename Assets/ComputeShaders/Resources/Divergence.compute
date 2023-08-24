@@ -1,0 +1,24 @@
+#pragma kernel CalcDivergence
+
+#include "../DispatchHelper.hlsl"
+#include "../GridParamsSampling.hlsl"
+
+RWTexture2D<float> _DivergenceTex;
+RWTexture2D<float2> _VelocityTex;
+
+int2 _Resolution;
+
+[numthreads(8, 8, 1)]
+void CalcDivergence(int3 thread_id : SV_DispatchThreadID)
+{
+    RETURN_IF_INVALID(thread_id);
+
+    float2 vLeft   = SampleVelocity(_VelocityTex, thread_id.xy + int2(-1, 0), _Resolution);
+    float2 vRight  = SampleVelocity(_VelocityTex, thread_id.xy + int2(1, 0), _Resolution);
+    float2 vBottom = SampleVelocity(_VelocityTex, thread_id.xy + int2(0, -1), _Resolution);
+    float2 vTop    = SampleVelocity(_VelocityTex, thread_id.xy + int2(0, 1), _Resolution);
+
+    float divergence = ((vRight.x - vLeft.x) + (vTop.y - vBottom.y)) * 0.5;
+
+    _DivergenceTex[thread_id.xy] = divergence;
+}

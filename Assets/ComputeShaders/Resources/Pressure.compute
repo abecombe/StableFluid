@@ -1,0 +1,29 @@
+#pragma kernel CalcPressure
+
+#include "../DispatchHelper.hlsl"
+#include "../GridParamsSampling.hlsl"
+
+RWTexture2D<float> _PressureTexRead;
+RWTexture2D<float> _PressureTexWrite;
+RWTexture2D<float> _DivergenceTex;
+
+int2 _Resolution;
+
+float _Alpha;
+float _Beta;
+
+[numthreads(8, 8, 1)]
+void CalcPressure(int3 thread_id : SV_DispatchThreadID)
+{
+    RETURN_IF_INVALID(thread_id);
+
+    float pLeft   = SamplePressure(_PressureTexRead, thread_id.xy + int2(-1, 0), _Resolution);
+    float pRight  = SamplePressure(_PressureTexRead, thread_id.xy + int2(1, 0), _Resolution);
+    float pBottom = SamplePressure(_PressureTexRead, thread_id.xy + int2(0, -1), _Resolution);
+    float pTop    = SamplePressure(_PressureTexRead, thread_id.xy + int2(0, 1), _Resolution);
+
+    float divergence = _DivergenceTex[thread_id.xy];
+    float pressure = (divergence * _Alpha + (pLeft + pRight + pBottom + pTop)) * 0.25 * _Beta;
+
+    _PressureTexWrite[thread_id.xy] = pressure;
+}

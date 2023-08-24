@@ -1,0 +1,22 @@
+#pragma kernel Advect
+
+#include "../DispatchHelper.hlsl"
+#include "../GridParamsSampling.hlsl"
+
+sampler2D _VelocityTexRead;
+RWTexture2D<float2> _VelocityTexWrite;
+
+int2 _Resolution;
+
+[numthreads(8, 8, 1)]
+void Advect(int3 thread_id : SV_DispatchThreadID)
+{
+    RETURN_IF_INVALID(thread_id);
+
+    float2 cellUV = (thread_id.xy + 0.5) / _Resolution;
+    float2 backTraceUV = cellUV - SampleVelocity(_VelocityTexRead, cellUV) / _Resolution;
+
+    float2 velocity = SampleVelocity(_VelocityTexRead, backTraceUV);
+
+    _VelocityTexWrite[thread_id.xy] = velocity;
+}

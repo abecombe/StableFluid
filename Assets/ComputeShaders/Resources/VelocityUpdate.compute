@@ -1,0 +1,61 @@
+#pragma kernel UpdateVelocity
+
+#include "../DispatchHelper.hlsl"
+#include "../GridParamsSampling.hlsl"
+#include "../Common.hlsl"
+#include "../Noise/SimplexNoise2D.hlsl"
+
+RWTexture2D<float> _PressureTex;
+RWTexture2D<float2> _VelocityTex;
+
+int2 _Resolution;
+
+float _Time;
+float2 _PointerPos; // uv
+float2 _PrevPointerPos; // uv
+float _ForceRadius;
+float _ForceCoefficient;
+float _AutoForceCoefficient;
+float _Viscosity;
+
+[numthreads(8, 8, 1)]
+void UpdateVelocity(int3 thread_id : SV_DispatchThreadID)
+{
+    RETURN_IF_INVALID(thread_id);
+
+    float2 velocity = SampleVelocity(_VelocityTex, thread_id.xy, _Resolution);
+
+    float pLeft   = SamplePressure(_PressureTex, thread_id.xy + int2(-1, 0), _Resolution);
+    float pRight  = SamplePressure(_PressureTex, thread_id.xy + int2(1, 0), _Resolution);
+    float pBottom = SamplePressure(_PressureTex, thread_id.xy + int2(0, -1), _Resolution);
+    float pTop    = SamplePressure(_PressureTex, thread_id.xy + int2(0, 1), _Resolution);
+
+    velocity += float2(pRight - pLeft, pTop - pBottom) * 0.5;
+
+    float2 mPos = _PointerPos * _Resolution;
+    float2 mPPos = _PrevPointerPos * _Resolution;
+    float2 mouseV = mPos - mPPos;
+    float len = length(mPos - (thread_id.xy + 0.5)) / _ForceRadius;
+    float d = saturate(1.0 - len) * length(mouseV) * _ForceCoefficient;
+    float2 mforce = d * normalize(mPos - (thread_id.xy + 0.5) + mouseV);
+
+    velocity += mforce;
+
+    float2 uv = (thread_id.xy + 0.5) / _Resolution;
+    float noiseX = SimplexNoise(float2(uv.x, _Time / 5.0 + uv.y));
+    float noiseY = SimplexNoise(float2(_Time / 5.0 + uv.x, uv.y));
+    float waveX = cos(_Time / 1.0 + noiseX) * sin(_Time / 0.4 + noiseX) * cos(_Time / 0.6 + noiseX);
+    float waveY = sin(_Time / 0.5 + noiseY) * cos(_Time / 0.8 + noiseY) * sin(_Time / 0.4 + noiseY);
+    waveX = map(waveX, -1.0, 1.0, -0.2, 1.2);
+    waveY = map(waveY, -1.0, 1.0, -0.2, 1.2);
+    float2 aPos = _Resolution * float2(waveX, waveY);
+    len = length(aPos - (thread_id.xy + 0.5)) / _ForceRadius / 10.0;
+    d = saturate(1.0 - len) * _AutoForceCoefficient;
+    float2 aforce = d * normalize(aPos - (thread_id.xy + 0.5));
+
+    velocity += aforce;
+
+    velocity *= _Viscosity;
+
+    _VelocityTex[thread_id.xy] = velocity;
+}

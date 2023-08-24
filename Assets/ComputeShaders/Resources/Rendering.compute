@@ -1,0 +1,31 @@
+#pragma kernel Render
+
+#include "../DispatchHelper.hlsl"
+#include "../GridParamsSampling.hlsl"
+#include "../Common.hlsl"
+
+RWTexture2D<float2> _VelocityTex;
+RWTexture2D<float> _PressureTex;
+RWTexture2D<float4> _RenderingTex;
+
+int2 _Resolution;
+float _Time;
+
+[numthreads(8, 8, 1)]
+void Render(int3 thread_id : SV_DispatchThreadID)
+{
+    RETURN_IF_INVALID(thread_id);
+
+    float2 velocity = SampleVelocity(_VelocityTex, thread_id.xy, _Resolution);
+    float pressure = SamplePressure(_PressureTex, thread_id.xy, _Resolution);
+
+    float vLength = length(velocity);
+
+    float3 color = hsv2rgb(float3(
+        map(vLength * 0.3, 0.0, 1.0, 0.1, 0.3) + _Time * 0.06,
+        map(pressure * 0.3, 0.0, 1.0, 0.7, 0.8),
+        map(1.0 - vLength * pressure * 0.1, 0.0, 1.0, 0.8, 0.9)
+        ));
+
+    _RenderingTex[thread_id.xy] = float4(color, 1.0);
+}
